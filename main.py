@@ -1,48 +1,68 @@
-
 import random
-
-from flask import Flask, render_template, make_response, request
-
+from flask import Flask, render_template, request, make_response, redirect, url_for
+from models import User
 
 app = Flask(__name__)
 
 
-@app.route('/', methods=["GET", "POST"])
+@app.route("/", methods=["GET"])
 def index():
-    #random_number = request.cookies.get('random_number')
-    if request.method == 'GET':
-        response = make_response(render_template('index.html'))
-        if not random_number:
-            #response.set_cookie("random_number", str(random.choice(range(20))))
+    email_address = request.cookies.get("email")
+
+    if email_address:
+        user = User.fetch_one(query=["email", "==", email_address])
     else:
-        guess = request.form.get('guess')
-        name = request.form.get('name')
-        random_number = random.choice(range(20))
-        Game(name, random_number)
-        game.create()
+        user = None
 
-        game = Game().fetch_one(query=['name', '==', name])
+    return render_template("index.html", user=user)
 
 
-        if int(guess) == int(random_number):
-            message = 'Teisingas spejimas!'
-            response = make_response(
-                render_template('index.html', message=message))
-            #response.set_cookie(
-                #"random_number", str(random.choice(range(20))))
+@app.route("/login", methods=["POST"])
+def login():
+    name = request.form.get("user-name")
+    email = request.form.get("user-email")
 
-        elif int(guess) > int(random_number):
-            message = 'Slaptas skaicius yra mazesnis'
-            response = make_response(
-                render_template('index.html', message=message))
+    # create a secret number
+    secret_number = random.randint(1, 30)
 
-        else:
-            message = 'Slaptas skaicius yra didesnis'
-            response = make_response(
-                render_template('index.html', message=message))
+    # see if user already exists
+    user = User.fetch_one(query=["email", "==", email])
+
+    if not user:
+        # create a User object
+        user = User(name=name, email=email, secret_number=secret_number)
+        user.create()  # save the object into a database
+
+    # save user's email into a cookie
+    response = make_response(redirect(url_for('index')))
+    response.set_cookie("email", email)
 
     return response
 
+
+@app.route("/result", methods=["POST"])
+def result():
+    guess = int(request.form.get("guess"))
+
+    email_address = request.cookies.get("email")
+
+    # get user from the database based on her/his email address
+    user = User.fetch_one(query=["email", "==", email_address])
+
+    if guess == user.secret_number:
+        message = "Correct! The secret number is {0}".format(str(guess))
+
+        # create a new random secret number
+        new_secret = random.randint(1, 30)
+
+        # update the user's secret number in the User collection
+        User.edit(obj_id=user.id, secret_number=new_secret)
+    elif guess > user.secret_number:
+        message = "Your guess is not correct... try something smaller."
+    elif guess < user.secret_number:
+        message = "Your guess is not correct... try something bigger."
+
+    return render_template("result.html", message=message)
 
 
 if __name__ == '__main__':
