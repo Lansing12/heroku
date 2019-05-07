@@ -1,1 +1,1 @@
-web: gunivorn man:app
+web: gunicorn man:app
